@@ -1,7 +1,3 @@
-Here’s a clear and well-structured README description in English that explains your project, the model and dataset you used, and the step-by-step process:
-
----
-
 # 🔍 Question Answering with Fine-Tuned RoBERTa on SQuAD v2
 
 This project demonstrates how to fine-tune a pre-trained transformer model for **extractive question answering** using the [SQuAD v2 dataset](https://huggingface.co/datasets/squad_v2) and the model [`deepset/roberta-base-squad2`](https://huggingface.co/deepset/roberta-base-squad2), which is specifically designed for question answering tasks.
