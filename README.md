@@ -1,60 +1,121 @@
-# 🔍 Question Answering with Fine-Tuned RoBERTa on SQuAD v2
-
-This project demonstrates how to fine-tune a pre-trained transformer model for **extractive question answering** using the [SQuAD v2 dataset](https://huggingface.co/datasets/squad_v2) and the model [`deepset/roberta-base-squad2`](https://huggingface.co/deepset/roberta-base-squad2), which is specifically designed for question answering tasks.
-
----
-
-## 📦 Model & Dataset
-
-- **Model:** `deepset/roberta-base-squad2`
-
-  - A RoBERTa-based model trained on SQuAD2.0, capable of returning "no answer" if the context does not contain the answer.
-
-- **Dataset:** `squad_v2` from Hugging Face Datasets
-
-  - Consists of context-question pairs, some of which have no answer in the context (unanswerable questions).
-
----
-
-## 🛠️ Steps Performed
-
-### 1. **Setup Environment**
-
-Installed the required libraries in Google Colab:
-
 ```python
-!pip install transformers datasets evaluate
+!rm -r ~/.cache/huggingface
 ```
 
-### 2. **Load Pre-trained Model and Dataset**
+* این دستور حافظه کش محلی Hugging Face را پاک می‌کند.
+* در مواقعی استفاده می‌شود که فایل‌های خراب یا نسخه‌های ناهماهنگ باعث خطا می‌شوند.
+* باعث می‌شود مدل‌ها و توکنایزرها دوباره از اول دانلود شوند.
+
+---
+
+```python
+!git clone https://github.com/Narjes-Rezaei/LLM-project.repo.git
+```
+
+* این خط، یک مخزن گیت (GitHub repository) را کلون می‌کند.
+* تمام فایل‌های موجود در آن مخزن را به محیط فعلی (مثلاً Google Colab) کپی می‌کند.
+* آدرس داده‌شده به عنوان منبع پروژه استفاده می‌شود.
+
+---
+
+```python
+!pip uninstall -y transformers tokenizers sentence-transformers
+!pip cache purge
+```
+
+* این دستور پکیج‌های `transformers`، `tokenizers`، و `sentence-transformers` را حذف می‌کند.
+* این کار زمانی مفید است که بخواهیم نسخه‌های مشخص و بدون تداخل از این کتابخانه‌ها را نصب کنیم.
+* همچنین `pip cache purge` کش pip را پاک می‌کند تا نسخه‌های قبلی در نصب جدید دخالت نکنند.
+
+---
+
+```python
+!pip install transformers==4.28.1 tokenizers==0.13.3 sentence-transformers==2.2.2
+```
+
+* با این دستور نسخه خاصی از کتابخانه‌های HuggingFace نصب می‌شود.
+* `transformers==4.28.1` نسخه پایدار مورد نیاز پروژه است.
+* `sentence-transformers` و `datasets` برای کار با داده‌ها و بردارهای معنایی به کار می‌روند.
+
+---
+
+```python
+!pip install -U datasets evaluate
+```
+
+* این دستور کتابخانه‌های `datasets` و `evaluate` را نصب یا به‌روزرسانی می‌کند.
+* برای بارگذاری دیتاست‌ها و ارزیابی عملکرد مدل استفاده می‌شود.
+
+---
+
+```python
+import os
+os.environ["WANDB_DISABLED"] = "true"
+```
+
+* تنظیم یک متغیر محیطی برای غیرفعال کردن اتصال به Weights & Biases (wandb).
+* این کار از باز شدن پنجره لاگ‌گیری wandb جلوگیری می‌کند.
+
+---
 
 ```python
 from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 
-model_checkpoint = "deepset/roberta-base-squad2"
+model_checkpoint = "distilbert-base-cased-distilled-squad"
+
 tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 model = AutoModelForQuestionAnswering.from_pretrained(model_checkpoint)
 
-dataset = load_dataset("squad_v2")
+dataset = load_dataset("adversarial_qa", "dbert")
 ```
+
+* بارگذاری مدل پایه `distilbert` مخصوص پرسش و پاسخ.
+* دانلود توکنایزر و مدل آموزش‌دیده از Hugging Face.
+* لود دیتاست `adversarial_qa` با کانفیگ `dbert` که شامل سؤالات چالشی است.
 
 ---
 
-### 3. **Preprocess the Dataset**
-
-Tokenized the dataset with proper padding, truncation, and length handling:
-
 ```python
 def preprocess(example):
-    return tokenizer(
-        example["question"],
-        example["context"],
-        truncation=True,
+    questions = [q.strip() for q in example["question"]]
+    contexts = example["context"]
+    answers = example["answers"]
+
+    start_positions = []
+    end_positions = []
+
+    for i in range(len(answers)):
+        answer = answers[i]
+        start_char = answer["answer_start"][0]
+        end_char = start_char + len(answer["text"][0])
+
+        start_positions.append(start_char)
+        end_positions.append(end_char)
+
+    tokenized_example = tokenizer(
+        questions,
+        contexts,
+        truncation="only_second",
         padding="max_length",
         max_length=384,
+        return_offsets_mapping=True
     )
 
+    tokenized_example["start_positions"] = start_positions
+    tokenized_example["end_positions"] = end_positions
+
+    return tokenized_example
+```
+
+* تابع پیش‌پردازش داده‌ها برای مدل.
+* سؤالات و متون را توکنایز می‌کند.
+* موقعیت دقیق شروع و پایان پاسخ‌ها در توکن‌ها محاسبه می‌شود.
+* آماده‌سازی داده برای آموزش مدل.
+
+---
+
+```python
 tokenized_datasets = dataset.map(
     preprocess,
     batched=True,
@@ -62,34 +123,33 @@ tokenized_datasets = dataset.map(
 )
 ```
 
+* اعمال تابع `preprocess` روی کل دیتاست.
+* ستون‌های اصلی مثل `question`, `context` و `answers` حذف می‌شوند.
+* نتیجه: دیتاست فقط شامل `input_ids`, `attention_mask`, `start_positions`, و `end_positions`.
+
 ---
-
-### 4. **Configure Training Parameters**
-
-Used `TrainingArguments` from Hugging Face to define training settings:
 
 ```python
 from transformers import TrainingArguments
 
 training_args = TrainingArguments(
     output_dir="./results",
+    evaluation_strategy="epoch",
+    learning_rate=2e-5,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=8,
     num_train_epochs=2,
-    evaluation_strategy="epoch",
-    save_strategy="epoch",
-    learning_rate=3e-5,
     weight_decay=0.01,
-    logging_dir="./logs",
-    load_best_model_at_end=True,
+    save_strategy="epoch"
 )
 ```
 
+* تنظیمات مربوط به آموزش مدل:
+
+  * مسیر ذخیره نتایج، تعداد epoch، batch size، نرخ یادگیری و ...
+  * مدل بعد از هر epoch ذخیره می‌شود.
+
 ---
-
-### 5. **Train the Model**
-
-Used the Hugging Face `Trainer` API for training:
 
 ```python
 from transformers import Trainer
@@ -98,38 +158,46 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=tokenized_datasets["train"],
-    eval_dataset=tokenized_datasets["validation"],
-    tokenizer=tokenizer,
+    eval_dataset=tokenized_datasets["validation"]
 )
-
-trainer.train()
 ```
+
+* آماده‌سازی Trainer برای مدیریت آموزش.
+* شامل مدل، داده‌ی آموزش و ارزیابی، و تنظیمات از قبل تعیین‌شده.
 
 ---
 
-### 6. **Save the Trained Model**
+```python
+trainer.train()
+```
 
-After training, saved the fine-tuned model:
+* آغاز فرایند آموزش مدل.
+* خروجی شامل لاگ‌های مربوط به loss و پیشرفت آموزش است.
+
+---
 
 ```python
 model.save_pretrained("project_code/model")
 tokenizer.save_pretrained("project_code/model")
 ```
 
+* ذخیره مدل و توکنایزر آموزش‌دیده در پوشه `project_code/model`.
+* این فایل‌ها بعداً در حالت inference استفاده خواهند شد.
+
 ---
-
-### 7. **Test the Trained Model**
-
-Used the pipeline API to ask questions from a context:
 
 ```python
 from transformers import pipeline
 
 qa = pipeline("question-answering", model=model, tokenizer=tokenizer)
 
-context = "Google Colab is a free Jupyter notebook environment that runs in the cloud."
+context = "Google Colab is a free platform that allows users to write and execute Python code in the browser."
 question = "What is Google Colab?"
 
 result = qa(question=question, context=context)
-print(result["answer"])
+print("Answer:", result["answer"])
 ```
+
+* استفاده از مدل آموزش‌دیده برای پاسخ به سؤال دلخواه.
+* با `pipeline` راحت می‌توان مدل را تست کرد.
+* خروجی نهایی چاپ می‌شود.
