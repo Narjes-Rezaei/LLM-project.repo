@@ -96,4 +96,4 @@ print("Answer:", result["answer"])
 اگر بخوای کوئری‌هایی مشابه دیتاستی که آموزش دیدی (مثل `adversarial_qa`) استفاده کنی:
 
 می‌تونی دیتاست رو از HuggingFace ببینی:
-   🔗 [Adversarial QA Dataset](https://huggingface.co/datasets/adversarial_qa)
+   🔗 https://huggingface.co/datasets/UCLNLP/adversarial_qa/viewer/dbert?utm_source=chatgpt.com&views%5B%5D=dbert_train
