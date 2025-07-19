@@ -1,203 +1,67 @@
-```python
-!rm -r ~/.cache/huggingface
-```
+## 📄 Project Documentation – LLM-based Retrieval System
 
-* این دستور حافظه کش محلی Hugging Face را پاک می‌کند.
-* در مواقعی استفاده می‌شود که فایل‌های خراب یا نسخه‌های ناهماهنگ باعث خطا می‌شوند.
-* باعث می‌شود مدل‌ها و توکنایزرها دوباره از اول دانلود شوند.
+This project consists of two different models built and fine-tuned for natural language processing tasks using HuggingFace Transformers. Here's a complete explanation of the directory structure and model logic.
 
 ---
 
-```python
-!git clone https://github.com/Narjes-Rezaei/LLM-project.repo.git
+### 📂 Project Structure
+
+```
+.
+├── QA_Model
+│   ├── LLMProject.ipynb
+│   ├── model
+│   │   ├── config.json
+│   │   ├── pytorch_model.bin
+│   │   ├── special_tokens_map.json
+│   │   ├── tokenizer_config.json
+│   │   ├── tokenizer.json
+│   │   └── vocab.txt
+│   ├── README.md
+│   ├── RunModel.ipynb
+│   └── RUNMODEL.md
+└── T2T_Model
+    ├── LLMProject.ipynb
+    └── README.md
 ```
 
-* این خط، یک مخزن گیت (GitHub repository) را کلون می‌کند.
-* تمام فایل‌های موجود در آن مخزن را به محیط فعلی (مثلاً Google Colab) کپی می‌کند.
-* آدرس داده‌شده به عنوان منبع پروژه استفاده می‌شود.
+#### 🔹 `QA_Model/`
+
+This folder contains the **Question Answering model**.
+
+- `LLMProject.ipynb`: The notebook where the QA model was trained and fine-tuned. It includes data loading, tokenizer setup, model loading, training loop, and evaluation.
+- `RunModel.ipynb`: A separate notebook for testing the trained QA model. It takes user questions and a context as input, then predicts the answer.
+- `model/`: Contains all the trained model artifacts, including:
+
+  - `pytorch_model.bin`: The trained model weights.
+  - `config.json`: Configuration of the model architecture.
+  - `tokenizer.json`, `tokenizer_config.json`, `special_tokens_map.json`, `vocab.txt`: Tokenizer details.
+
+- `README.md`: Basic info about the QA model project.
+- `RUNMODEL.md`: Describes how to load and run inference on the trained QA model.
 
 ---
 
-```python
-!pip uninstall -y transformers tokenizers sentence-transformers
-!pip cache purge
-```
+#### 🔹 `T2T_Model/`
 
-* این دستور پکیج‌های `transformers`، `tokenizers`، و `sentence-transformers` را حذف می‌کند.
-* این کار زمانی مفید است که بخواهیم نسخه‌های مشخص و بدون تداخل از این کتابخانه‌ها را نصب کنیم.
-* همچنین `pip cache purge` کش pip را پاک می‌کند تا نسخه‌های قبلی در نصب جدید دخالت نکنند.
+This folder holds a simpler **Text-to-Text (T2T)** model.
+
+- `LLMProject.ipynb`: In this notebook, the model is trained on a prompt-based dataset. It takes a question (prompt) and generates an answer without requiring any extra context.
+- `README.md`: Describes how the T2T model works and how it was trained.
 
 ---
 
-```python
-!pip install transformers==4.28.1 tokenizers==0.13.3 sentence-transformers==2.2.2
-```
+## 🔍 Difference Between QA and T2T Models
 
-* با این دستور نسخه خاصی از کتابخانه‌های HuggingFace نصب می‌شود.
-* `transformers==4.28.1` نسخه پایدار مورد نیاز پروژه است.
-* `sentence-transformers` و `datasets` برای کار با داده‌ها و بردارهای معنایی به کار می‌روند.
+| Feature               | QA_Model                               | T2T_Model                       |
+| --------------------- | -------------------------------------- | ------------------------------- |
+| 🔄 Input              | Question + Context                     | Just a Question (Prompt)        |
+| 🧠 Model Type         | Extractive QA (like BERT)              | Text generation model (like T5) |
+| 🏷️ Use Case           | Needs context to answer properly       | Can generate free-text answers  |
+| 📦 Output Type        | Span from context                      | Entirely new generated text     |
+| 🔧 Training Objective | Find the start and end token of answer | Generate answer token-by-token  |
 
----
+### ✅ When to use which?
 
-```python
-!pip install -U datasets evaluate
-```
-
-* این دستور کتابخانه‌های `datasets` و `evaluate` را نصب یا به‌روزرسانی می‌کند.
-* برای بارگذاری دیتاست‌ها و ارزیابی عملکرد مدل استفاده می‌شود.
-
----
-
-```python
-import os
-os.environ["WANDB_DISABLED"] = "true"
-```
-
-* تنظیم یک متغیر محیطی برای غیرفعال کردن اتصال به Weights & Biases (wandb).
-* این کار از باز شدن پنجره لاگ‌گیری wandb جلوگیری می‌کند.
-
----
-
-```python
-from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForQuestionAnswering
-
-model_checkpoint = "distilbert-base-cased-distilled-squad"
-
-tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-model = AutoModelForQuestionAnswering.from_pretrained(model_checkpoint)
-
-dataset = load_dataset("adversarial_qa", "dbert")
-```
-
-* بارگذاری مدل پایه `distilbert` مخصوص پرسش و پاسخ.
-* دانلود توکنایزر و مدل آموزش‌دیده از Hugging Face.
-* لود دیتاست `adversarial_qa` با کانفیگ `dbert` که شامل سؤالات چالشی است.
-
----
-
-```python
-def preprocess(example):
-    questions = [q.strip() for q in example["question"]]
-    contexts = example["context"]
-    answers = example["answers"]
-
-    start_positions = []
-    end_positions = []
-
-    for i in range(len(answers)):
-        answer = answers[i]
-        start_char = answer["answer_start"][0]
-        end_char = start_char + len(answer["text"][0])
-
-        start_positions.append(start_char)
-        end_positions.append(end_char)
-
-    tokenized_example = tokenizer(
-        questions,
-        contexts,
-        truncation="only_second",
-        padding="max_length",
-        max_length=384,
-        return_offsets_mapping=True
-    )
-
-    tokenized_example["start_positions"] = start_positions
-    tokenized_example["end_positions"] = end_positions
-
-    return tokenized_example
-```
-
-* تابع پیش‌پردازش داده‌ها برای مدل.
-* سؤالات و متون را توکنایز می‌کند.
-* موقعیت دقیق شروع و پایان پاسخ‌ها در توکن‌ها محاسبه می‌شود.
-* آماده‌سازی داده برای آموزش مدل.
-
----
-
-```python
-tokenized_datasets = dataset.map(
-    preprocess,
-    batched=True,
-    remove_columns=dataset["train"].column_names
-)
-```
-
-* اعمال تابع `preprocess` روی کل دیتاست.
-* ستون‌های اصلی مثل `question`, `context` و `answers` حذف می‌شوند.
-* نتیجه: دیتاست فقط شامل `input_ids`, `attention_mask`, `start_positions`, و `end_positions`.
-
----
-
-```python
-from transformers import TrainingArguments
-
-training_args = TrainingArguments(
-    output_dir="./results",
-    evaluation_strategy="epoch",
-    learning_rate=2e-5,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=8,
-    num_train_epochs=2,
-    weight_decay=0.01,
-    save_strategy="epoch"
-)
-```
-
-* تنظیمات مربوط به آموزش مدل:
-
-  * مسیر ذخیره نتایج، تعداد epoch، batch size، نرخ یادگیری و ...
-  * مدل بعد از هر epoch ذخیره می‌شود.
-
----
-
-```python
-from transformers import Trainer
-
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized_datasets["train"],
-    eval_dataset=tokenized_datasets["validation"]
-)
-```
-
-* آماده‌سازی Trainer برای مدیریت آموزش.
-* شامل مدل، داده‌ی آموزش و ارزیابی، و تنظیمات از قبل تعیین‌شده.
-
----
-
-```python
-trainer.train()
-```
-
-* آغاز فرایند آموزش مدل.
-* خروجی شامل لاگ‌های مربوط به loss و پیشرفت آموزش است.
-
----
-
-```python
-model.save_pretrained("project_code/model")
-tokenizer.save_pretrained("project_code/model")
-```
-
-* ذخیره مدل و توکنایزر آموزش‌دیده در پوشه `project_code/model`.
-* این فایل‌ها بعداً در حالت inference استفاده خواهند شد.
-
----
-
-```python
-from transformers import pipeline
-
-qa = pipeline("question-answering", model=model, tokenizer=tokenizer)
-
-context = "Google Colab is a free platform that allows users to write and execute Python code in the browser."
-question = "What is Google Colab?"
-
-result = qa(question=question, context=context)
-print("Answer:", result["answer"])
-```
-
-* استفاده از مدل آموزش‌دیده برای پاسخ به سؤال دلخواه.
-* با `pipeline` راحت می‌توان مدل را تست کرد.
-* خروجی نهایی چاپ می‌شود.
+- **QA_Model** is ideal when you have a clear **context document** and need to extract a specific answer from it. It performs best on structured QA datasets.
+- **T2T_Model** is more flexible and can be used for **open-ended questions**, chatbots, summarization, or generation tasks. It doesn’t need an external context.
